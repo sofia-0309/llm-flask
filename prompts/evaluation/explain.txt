@@ -1,0 +1,11 @@
+Given the multiple-choice question and the selected choice, 
+Question: {{ question }}
+Option A: {{option_a}}  
+Option B: {{option_b}}  
+Option C: {{option_c}}  
+Option D: {{option_d}};  
+Chosen answer: {{ selection }};
+Correctness: {{ is_correct }}
+Instructions:
+- In 2 sentences, clearly explain concisely why the chosen answer is correct or incorrect WITHOUT mentioning or giving ANY clue about the possible correct answer. 
+

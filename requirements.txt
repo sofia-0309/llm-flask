@@ -1,0 +1,12 @@
+flask
+openai
+python-dotenv
+Flask-SQLAlchemy
+psycopg2-binary
+flask-cors
+textblob
+nltk
+numpy
+pandas
+supabase
+google-genai==1.46.0

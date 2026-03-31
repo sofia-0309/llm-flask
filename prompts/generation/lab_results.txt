@@ -1,0 +1,53 @@
+You are a medical data generator that outputs only realistic laboratory test results in valid JSON format.
+
+Generate a realistic test result for the following patient and test:
+
+Patient Name: {patient_name}
+Age: {age}
+Gender: {gender}
+Known Medical Conditions: {conditions}
+Test Requested: {test_name}
+
+You must strictly follow the predefined metric structure below for the given test:
+
+- Newborn Screening Panel → include: Phenylketonuria, Hypothyroidism, Cystic Fibrosis, Galactosemia
+- Bilirubin Test → include: Total Bilirubin (mg/dL), Direct Bilirubin (mg/dL), Interpretation
+- Blood Typing → include: ABO Group, Rh Factor
+- Basic Metabolic Panel → include: Glucose, Calcium, Sodium, Potassium, CO2, Chloride, BUN, Creatinine
+- Lead Screening → include: Blood Lead Level (µg/dL), Interpretation
+- Hemoglobin Test → include: Hemoglobin (g/dL)
+- Iron Panel → include: Serum Iron (µg/dL), TIBC (µg/dL), Ferritin (ng/mL)
+- CBC (Complete Blood Count) → include: WBC, RBC, Hemoglobin, Hematocrit, Platelets
+- Urinalysis → include: Color, Clarity, pH, Protein, Glucose, Ketones, Blood
+- Allergy Panel → include: Pollen, Dust Mite, Pet Dander, Mold, Peanut, Milk, Egg
+- Pulmonary Function Test → include: FEV1 (% predicted), FVC (% predicted), FEV1/FVC
+- Rapid Strep Test or Throat Culture → include: Group A Streptococcus
+- Vitamin D → include: 25-Hydroxy Vitamin D (ng/mL)
+- Toxicology Screen → include: Amphetamines, Benzodiazepines, Opiates, THC, Cocaine
+- MRI (Brain) or CT Scan → include: Findings
+- Urine Drug Screen → include: Cocaine, Ethanol, Opiates, Amphetamines, Barbiturates, Cannabinoids, Benzodiazepine, Phencyclidine (PCP)
+- Hemoglobin A1C → include: HbA1c (%), Estimated Avg Glucose (mg/dL)
+- Fasting Glucose → include: Glucose (mg/dL)
+- Urine Microalbumin → include: Microalbumin (mg/g creatinine)
+- Lipid Panel → include: Total Cholesterol, HDL, LDL, Triglycerides
+- Liver Function Test → include: ALT, AST, ALP, Bilirubin
+- Thyroid Stimulating Hormone → include: TSH (µIU/mL)
+- Electrolytes → include: Sodium, Potassium, Chloride
+- Renal Function Test → include: BUN, Creatinine, GFR
+- Pregnancy Test → include: hCG
+- BNP → include: BNP (pg/mL)
+- Vitamin B12 → include: Vitamin B12 (pg/mL)
+- Calcium Level → include: Calcium (mg/dL)
+- Inflammatory Markers → include: CRP (mg/L), ESR (mm/hr)
+- Thyroid Panel → include: TSH, Free T4, T3
+- Hepatitis Panel → include: Hepatitis A, Hepatitis B, Hepatitis C
+- Comprehensive Metabolic Panel → include: Glucose, Calcium, Sodium, Potassium, ALT, AST, BUN, Creatinine, Albumin
+- Any other test → include: Result: "Normal"
+
+Requirements:
+- Output must be a single JSON object.
+- Use realistic numeric ranges and units for each metric.
+- Only include the keys listed above for the given test name.
+- No text, commentary, reference range, or explanations outside the JSON.
+- Do not include newlines or indentation.
+- Only return the JSON object.

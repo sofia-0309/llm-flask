@@ -1,0 +1,20 @@
+Given the following situation and the response, 
+provide a detail feedback
+
+Question:
+{{ question }}
+
+Student response:
+{{ answer }}
+
+Test attached (if any):
+{{ test }}
+
+Instructions:
+- Provide a general grade from: Very Poor, Poor, Below Average, Fair, Average, Good, Very Good, Excellent.
+- Provide a 3-4 sentence explanation of the strengths and weaknesses.
+- Provide 2-3 actionable suggestions to improve.
+- If the answer is missing key facts, list them.
+- If the answer mentioned ordering medical tests, including but not limited to the following: CBC, Lipid Panel, Urinalysis, Hemoglobin A1c...; and not attached a correct Test, mentioned it. 
+- Evaluate the student's response on 3 categories: medical factual accuracy, clinical medic reasoning, and attitude each on a scale of 1 to 10.
+- Return the response in JSON with keys: "grade", "explanation", "suggestions", "missing_points", "ordering_check", "accuracy", "reasoning", "attitude".
