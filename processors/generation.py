@@ -15,6 +15,7 @@ import random
 import uuid
 from flask import jsonify
 from config import supabase_client
+from utils.generation.staff_generator import StaffGenerator
 
 
 def pick_dermnet_image(condition):
@@ -72,6 +73,8 @@ def run_generation(task_type, data):
         return generate_patient_case()
     elif task_type == "lab_result":
         return {"status": "lab_result placeholder"}
+    elif task_type == "staff_message":
+        return generate_staff_message()
     else:
         return {"error": f"Unknown task_type: {task_type}"}
     
@@ -149,6 +152,7 @@ def generate_patient_case(featured = False):
         # feed each generate function the supabase uploader and patient objectsx
         generate_lab_results(new_patient_id, uploader, patient)
         generate_prescriptions(new_patient_id, uploader, patient)
+        generate_staff_messages(new_patient_id, uploader, patient)
 
         # # condition to check if patient.chief_complaint == visual condition
         # if patient.chief_complaint in VISUAL_CONDITIONS:
@@ -184,6 +188,33 @@ def generate_patient_case(featured = False):
         "message": "Patient generated and uploaded"
 
     }
+
+def generate_staff_message():
+    # read the nhanes file
+    nhanes_path = "NHANES.csv"
+    nhanes = pd.read_csv(nhanes_path)
+    # get one random row from the dataset
+    row = nhanes.sample(1).iloc[0]
+
+    # build a patient object from that row, uploader, and staff gen
+    patient = Patient(row)
+    uploader = SupabaseUploader()
+    staff_generator = StaffGenerator(patient=patient)
+
+    # generate the staff message and upload it
+    res = staff_generator.generate_and_upload(uploader)
+
+    # build the final response
+    fin = {
+        "status": res.get("status", "error"), "staff_id": res.get("staff_id"), "message": res.get("message", "staff message generated"),
+    }
+    # return the final result
+    return fin
+
+
+def generate_staff_messages(patient_id, uploader, patient, count=2):
+    staff_generator = StaffGenerator(patient=patient, patient_id=patient_id)
+    return staff_generator.generate_and_upload_batch(uploader, count=count)
 #Generate patient information but not submit
 def generate_new_patient():
     # load in NHANES dataset
@@ -251,6 +282,7 @@ def upload_supabase(data):
         # feed each generate function the supabase uploader and patient objectsx
         generate_lab_results(new_patient_id, uploader, patient)
         generate_prescriptions(new_patient_id, uploader, patient)
+        generate_staff_messages(new_patient_id, uploader, patient)
 
     return {
         "status":"success",

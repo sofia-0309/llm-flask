@@ -5,7 +5,7 @@ import asyncio
 def run_evaluation(task_type, data):
 
     # Checking task type to redirect
-    if task_type == "patient_question" or task_type =="lab_result" or task_type == "prescription":
+    if task_type == "patient_question" or task_type == "staff_message" or task_type =="lab_result" or task_type == "prescription":
         print("pick up task type: "+ task_type)
         feedback = Feedback(data)
         response = asyncio.run(feedback.generate_answer())

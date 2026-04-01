@@ -140,6 +140,19 @@ class SupabaseUploader:
         ######################################################################################
 
         return {"status": "success", "prescription_id": prescription_id}
+
+    def upload_staff_message(self, staff_message):
+        data = {
+            "patient_id": str(staff_message.patient_id), "name": staff_message.name,
+            "role": staff_message.role, "specialty": staff_message.specialty, "staff_message": staff_message.staff_message,
+            "profile_picture": staff_message.profile_picture,
+        }
+
+        resp = self.client.table("staff").insert(data).execute()
+        staff_id = resp.data[0]["id"]
+
+        fin = {"status": "success", "staff_id": staff_id}
+        return fin
     
 
     def upload_picture(self, patient_id, image_bytes, condition):
@@ -217,7 +230,28 @@ class SupabaseUploader:
 
         except Exception as e:
             print(f"Error uploading profile picture: {e}")
-            return {"status": "error", "message": str(e)}    
+            return {"status": "error", "message": str(e)}  
+
+    def upload_visit(self, patient_id, visit_data):
+        """
+        Upload a single visit to the patient_visits table.
+        """
+        try:
+            data = {
+                "patient_id": patient_id,
+                "visit_date": visit_data["visit_date"],
+                "visit_type": visit_data["visit_type"],
+                "clinical_notes": visit_data["clinical_notes"],
+                "provider_id": visit_data.get("provider_id")
+            }
+            
+            result = self.client.table("patient_visits").insert(data).execute()
+            
+            return {"status": "success", "visit_id": result.data[0]["id"]}
+            
+        except Exception as e:
+            print(f"Error uploading visit: {e}")
+            return {"status": "error", "message": str(e)}  
         
 
 

@@ -1,0 +1,20 @@
+You are a hospital staff member writing a message in the EHR to the primary care provider about the patient below.
+Patient context:
+- Name: {patient_name}
+- Age: {age}
+- Chief complaint: {chief_complaint}
+- Medical conditions: {medical_conditions}
+- Medical history: {history}
+- Surgical history: {surgeries}
+
+Staff context:
+- Role: {staff_role}
+- Specialty: {staff_specialty}
+
+Write a concise clinical message that:
+- Refers to the patients current issue and any relevant meds/labs
+- Asks a focused clinical question or makes a clear recommendation
+- Sounds like real professional communication
+- it is 2–4 sentences
+
+Example style: “I noticed the patient is on anticoagulation and has surgery scheduled. Is it appropriate to hold their blood thinner for X days, and do you want bridging therapy?”

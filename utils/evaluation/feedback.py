@@ -55,6 +55,11 @@ class Feedback:
         
         emb_score, llm_scores =  await run_async_tasks()
 
+        # if llm_scores is an error string switch back to zero
+        if type(llm_scores) == str:
+            llm_scores =  type( "LLMScores",(),{ "factual_accuracy": 0, "clinical_reasoning": 0,
+                    "communication_clarity": 0, "empathy": 0,},)()
+
         result = aggregate_scores(5, emb_score, llm_scores)
 
         return result
@@ -74,8 +79,13 @@ class Feedback:
         user_message = original_data.get("user_message", "")
         task_type = original_data.get("task_type", "patient_question")
 
-        # 1) Remove patient_message if task_type is not patient_question
-        if task_type != "patient_question":
+        if task_type == "staff_message":
+            staff_message = original_data.get("staff_message")
+            if staff_message and not original_data.get("patient_message"):
+                original_data["patient_message"] = staff_message
+
+        # 1) Remove patient_message if task_type is not patient_question or staff_message
+        if task_type not in ["patient_question", "staff_message"]:
             original_data.pop("patient_message", None)
             if "patient" in original_data:
                 original_data["patient"].pop("patient_message", None)
@@ -101,18 +111,38 @@ class Feedback:
             last_visit_date = original_data["patient"].get("last_visit_date")
 
         # 9) Base instructions added regardless of task type.
-        base_instructions = (
-            "You are replying to an EHR message from a patient who is under your care. You have to give your predictions with current limited data."
-            "You are their primary healthcare provider. "
-            "Your response should be professional, concise, patient-friendly, and authoritative. "
-        )
+        ai_tone = original_data.get("ai_tone", "default")
+        tone_line = ""
+        if ai_tone == "ai-stein":
+            tone_line = (
+                "Tone: quirky, funny, but very smart "
+                "Be direct and concise. Call out missing clinical steps exactly "
+                "Do not sugarcoat talk in the tone of heimidinger from league of legends")
+
+        if task_type == "staff_message":
+            base_instructions = (
+                "You are replying to an EHR message from a staff member about a patient under your care. "
+                "You are the primary healthcare provider. "
+                "Your response should be professional, concise, collaborative, and clinically appropriate. "
+            ) + tone_line
+        else:
+            base_instructions = (
+                "You are replying to an EHR message from a patient who is under your care. You have to give your predictions with current limited data."
+                "You are their primary healthcare provider. "
+                "Your response should be professional, concise, patient-friendly, and authoritative. "
+            ) + tone_line
 
         if last_visit_date:
-            base_instructions += f"\nThe patient’s last recorded office visit was on {last_visit_date}. "\
-                                "Factor this into your response — if it has been more than a year, "\
-                                "recommend follow-up or an in-person evaluation before prescribing or refilling medication."
+            base_instructions += (f"\nThe patient’s last recorded office visit was on {last_visit_date}. "
+                                "Only consider follow-up if it is clinically relevant to the current scenario. "
+                                "Do NOT assume the patient is overdue solely based on time."
+            )
         else:
-            base_instructions += "\nNo last visit date is recorded. You should recommend that the patient schedule an appointment if appropriate."
+            base_instructions += (
+                "\nNo last visit date is recorded. Do not assume the refill should be denied "
+        "or that an appointment is automatically required for that reason alone. "
+        "Focus on medication risk, symptom control, monitoring needs, and red flags."
+            )
 
         universal_intro = f"""You must return
         No markdown, no bold text, no italics. Plain text only.
@@ -159,7 +189,11 @@ class Feedback:
             If the patient’s message is related to mental health, include a disclaimer advising them to call 
             the Suicide & Crisis Lifeline at 988.
             """
-################################################################
+        elif task_type == "staff_message":
+            task_specific_part = """
+            This is an professional staff question. In a single paragraph: acknowledge the staff members concern,
+            provide a clear clinical recommendation or plan, and ask any necessary follow up question for clarification.
+            """
         elif task_type == "lab_result":
             task_specific_part = """
             Provide a succinct interpretation of the lab results 
@@ -172,11 +206,30 @@ class Feedback:
             Avoid farewells or fluff.
             Evaluate and comment on the following points:
             - What monitoring (e.g., vitals, labs, or follow-up visits) is required prior to refilling the medication.
-            - Whether the patient has had an office visit within the last year.
             - Whether any necessary lab work (such as renal, hepatic, or drug-level monitoring) is up to date.
             - Whether the requested medication is safe given the patient's other active medications, allergies, or comorbidities.
             - If any of these checks are missing, recommend appropriate next steps (e.g., scheduling an appointment, ordering labs).
+            - Do NOT recommend denying or delaying a refill solely because the last visit was many months ago.
+            - For routine or rescue medications, prioritize symptom control, frequency of use, worsening symptoms, and safety.
+            - If follow-up is recommended, explain the clinical reason instead of relying only on time since last visit.
 
+            """
+        elif task_type == "orders_feedback":
+            task_specific_part = """
+            Review only the listed medical orders.
+
+            Do not summarize the patient.
+            Do not explain the diagnosis.
+            Do not give treatment advice.
+            Do not add an introduction.
+            Do not add a conclusion.
+            Do not write paragraphs.
+            Output only a numbered list.
+            Do not give away or mention chief complaint
+
+            Format exactly like this:
+            1. Order Name: 12 word reason of whether appropriate
+            2. Order Name: 12 word reason of whether appropriate
             """
         else:
             task_specific_part = """
@@ -189,24 +242,16 @@ class Feedback:
 
         #Option 2:Communication focus
         option_2 =f""" 
- 
         OUTPUT MUST BE EXACTLY THIS FORMAT:  
-
+      
             Rating:
                 - Provide ONE integer between 1 and 5 AND DONT ADD A SLASH(-) BEFORE THE NUMBER.
-                - Rating of 1 demonstrates poor communication, dismissiveness, or lack of empathy.
-                - Rating of 2 demonstrates minimal engagement with the patient’s concerns or very limited empathy.
-                - Rating of 3 demonstrates clear communication but limited empathy, personalization, or patient-centeredness.
-                - Rating of 4 demonstrates empathetic, patient-centered, and supportive communication.
-                - Rating of 5 demonstrates highly empathetic, clear, validating, and patient-tailored communication.
-
-                SPECIAL SCORING RULES:
-                - If the message is extremely short, generic, or non‑clinical (e.g., “hey u good?”, “idk”, “AI bot?”) → Rating MUST be 1.
-                - If the diagnosis is completely wrong BUT the tone is kind, respectful, or supportive → Rating should be 3.
-                    * In this case, mention that bedside manner was strong but clinical accuracy was incorrect.
-                - If the message is excellent in tone AND clinically appropriate → Rating can be 4 or 5.
-                - Do NOT lower the communication score just because the medical reasoning is wrong unless the tone is also dismissive or unclear.
-
+                - Rating of 1 demonstrates poor communication and lack of empathy.
+                - Rating of 2 demonstrates minimal engagement with the patient’s concerns.
+                - Rating of 3 demonstrates clear communication but limited empathy or personalization.
+                - Rating of 4 demonstrates empathetic, patient-centered communication.
+                - Rating of 5 demonstrates highly empathetic, clear, and supportive communication tailored to the patient’s concerns.
+             
             Strengths:
                 - Provide EXACTLY 2 bullet points.
                 - Each bullet must be one sentence.
@@ -214,25 +259,28 @@ class Feedback:
                 - Highlight things like:
                     * clear explanations
                     * supportive or reassuring language
-                    * addressing the patient’s specific concerns
-                    * validating feelings
-                    * appropriate tone and word choice
+                    * active listening (addressing patient concerns)
+                    * appropriate tone and wording
+                
 
             Improvements:
-                - Provide EXACTLY 3 bullet points.
+               - Provide EXACTLY 3 bullet points.
                 - Each bullet must be one actionable COMMUNICATION or MANNERS improvement.
                 - Be specific and behavior-based (what the student should say or do differently).
                 - Focus on:
                     * improving clarity or structure
                     * increasing empathy or validation
-                    * avoiding abrupt, confusing, or dismissive language
+                    * avoiding confusing, abrupt, or dismissive language
+
 
         Hard rules:
-            - Don't add a slash before the rating.
-            - Don't advise students to do something they already mentioned in their message.
-            - FOCUS ONLY on communication strengths and improvements.
-            - If the message is good, you do NOT need to force negative feedback.
 
+        - Don't add a slash before the rating. For example - 3
+        - Don't advice students to do something they already mentioned in their message
+        - FOCUS ON COMMUNICATION STRENGTHS AND IMPROVEMENTS
+        - Follow the rating provided above
+        - If the message is good you dont need to look for something bad in it.
+              
 
             """
         #Diagnosis focus
@@ -290,12 +338,32 @@ class Feedback:
         - Good medical reasoning but wrong diagnosis can not have more than a rating of 2
         - If the message has a rating of 5  you dont need to look for something bad in it.
 
-        
-        
+        """
+        #Importance sensitive
 
-            """
+        option_4 = f"""
+        OUTPUT MUST BE EXACTLY THIS FORMAT:
+
+            Rating:
+                - Provide ONE integer between 1 and 5 AND DONT ADD A SLASH(-) BEFORE THE NUMBER.
+                - Rating of 1 demonstrates poor communication and lack of empathy.
+                - Rating of 2 demonstrates minimal engagement with the patient’s concerns.
+                - Rating of 3 demonstrates clear communication but limited empathy or personalization.
+                - Rating of 4 demonstrates empathetic, patient-centered communication.
+                - Rating of 5 demonstrates highly empathetic, clear, and supportive communication tailored to the patient’s concerns.
+             
+            Strengths:
+            - Provide EXACTLY 3 bullet points.
+            - Each bullet must be one sentence.
+            - Focus on safety recognition and risk prioritization.
+
+            Improvements:
+            - Provide EXACTLY 3 bullet points.
+            - Each bullet must be one actionable safety-focused improvement.
+            - Be specific and clinically relevant.
+
+        """
         
-     
     
         intro_second =f"""
             You are grading a student's EHR reply. Return ONLY the feedback text.
@@ -342,10 +410,11 @@ class Feedback:
             - Assess whether the student correctly decided to refill or modify the prescription.
             - Address the following clinical safety considerations:
                 - Whether appropriate monitoring (vitals, labs, or follow-up visits) was considered before refilling.
-                - Whether the patient has had a recent office visit (within the past year).
                 - Whether relevant lab work or drug-level monitoring is up to date.
                 - Whether the medication appears safe given the patient's other active medications, allergies, and comorbidities.
                 - If any of these are missing, recommend the appropriate next steps (e.g., scheduling an appointment or ordering labs).
+                - Do NOT criticize or recommend withholding a refill solely because the last visit was many months ago.
+                - Focus on clinical reasoning such as symptom control, medication safety, and red flags instead.
 
         • If this is a **patient message** task:
             - Provide your feedback as a single concise paragraph.
@@ -357,6 +426,22 @@ class Feedback:
             - Preventive care (e.g., vaccinations, screenings, counseling programs)
             - Therapies or medications (e.g., antibiotics, antihypertensives, bronchodilators, statins, antidepressants)
             - Only comment on orders if they are directly relevant to the patient’s situation. Do not suggest unrelated tests or treatments.
+
+        • If this is a **orders_feedback** task:
+            - Review only the listed medical orders.
+
+            - Do not summarize the patient.
+            - Do not explain the diagnosis.
+            - Do not give treatment advice.
+            - Do not add an introduction.
+            - Do not add a conclusion.
+            - Do not write paragraphs.
+            - Output only a numbered list.
+            - Do not give away or mention chief complaint
+
+            - Format exactly like this:
+            1. Order Name: 12 word reason of whether appropriate
+            2. Order Name: 12 word reason of whether appropriate
 
         ---
 
@@ -439,6 +524,3 @@ class Feedback:
             #"response_score": round(totalScore, 1),
             #"response_rating": rating,
         }
-
-                
-            

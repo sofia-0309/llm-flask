@@ -17,6 +17,7 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 NHANES_PATH = os.getenv("NHANES_PATH", "NHANES.csv")
 PATIENT_MESSAGE_PROMPT = os.getenv("PATIENT_MESSAGE_PROMPT", "prompts/generation/patient_message.txt")
 LAB_RESULTS_PROMPT = os.getenv("LAB_RESULTS_PROMPT", "prompts/generation/lab_results.txt")
+STAFF_MESSAGE_PROMPT = os.getenv("STAFF_MESSAGE_PROMPT", "prompts/generation/staff_message.txt")
 
 # openai client
 if not OPENAI_API_KEY:

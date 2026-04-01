@@ -1,5 +1,6 @@
 import os
 import json
+import random
 from flask import Flask, request, jsonify, Response
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -7,6 +8,8 @@ from config import supabase_client
 from processors.generation import upload_supabase
 from processors.generation import generate_new_patient
 from processors.generation import run_generation
+from utils.database.supabase_uploader import SupabaseUploader
+from utils.generation.staff_generator import StaffGenerator
 from processors.evaluation import run_evaluation
 from flask_cors import CORS
 
@@ -531,6 +534,23 @@ Since task_type is prescription, provide a concise plan for prescription changes
 refills, or dosage. (Note: the student_refilled field indicates if the prescription should be refilled: true means refill, false means not refill.)
 Avoid farewells or fluff.
         """
+    elif task_type == "orders_feedback":
+        task_specific_part = """
+        Review only the listed medical orders.
+
+        Do not summarize the patient.
+        Do not explain the diagnosis.
+        Do not give treatment advice.
+        Do not add an introduction.
+        Do not add a conclusion.
+        Do not write paragraphs.
+        Output only a numbered list.
+        Do not give away or mention chief complaint
+
+        Format exactly like this:
+        1. Order Name: 12 word reason of whether appropriate
+        2. Order Name: 12 word reason of whether appropriate
+        """
     else:
         task_specific_part = """
 Unknown task_type. Provide a concise, professional response with no concluding words or farewells.
@@ -610,9 +630,62 @@ def explain_request():
     # send data to respective processors based on task type
     if task_type in ["mcq", "single_mcq", "patient_case"]:
         result = run_generation(task_type, original_data)
-    elif task_type in ["patient_question","prescription","lab_result", "explain", "follow", "analyze"]:
+    elif task_type in ["patient_question","staff_message","prescription","lab_result", "explain", "follow", "analyze"]:
         print("pick up evaluation")
         result = run_evaluation(task_type, original_data)
+    elif task_type == "orders_feedback":
+        patient = original_data.get("patient", {})
+        orders = original_data.get("order", [])
+
+        patient_name = patient.get("name", "Unknown patient")
+        medical_history = patient.get("medical_history", "No medical history provided")
+        gender = patient.get("gender", "Unknown")
+        age = patient.get("age", "Unknown")
+
+        chief_concern = patient.get("chief_concern", {})
+        chief_complaints = chief_concern.get("chief_complaint", [])
+
+        order_names = []
+        for order in orders:
+            order_name = order.get("name", "Unknown order")
+            order_names.append(order_name)
+
+        prompt = f"""
+    You are evaluating a medical student's selected orders for a patient.
+
+    Patient name: {patient_name}
+    Age: {age}
+    Gender: {gender}
+    Medical history: {medical_history}
+    Chief complaints: {", ".join(chief_complaints)}
+
+    Orders placed:
+    {chr(10).join(f"- {name}" for name in order_names)}
+
+    Review only the listed medical orders.
+
+    Do not summarize the patient.
+    Do not explain the diagnosis.
+    Do not give treatment advice.
+    Do not add an introduction.
+    Do not add a conclusion.
+    Do not write paragraphs.
+    Output only a numbered list.
+    Do not give away or mention chief complaint
+
+    Format exactly like this:
+    1. Order Name: 12 word reason of whether appropriate
+    2. Order Name: 12 word reason of whether appropriate
+    """
+
+        response = client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=250,
+            temperature=0.4
+        )
+
+        result = response.choices[0].message.content.strip()
     else:
         print("else he")
         return jsonify({"error": f"Unknown task_type {task_type}"}), 400
@@ -620,6 +693,291 @@ def explain_request():
     return jsonify(result)
 
 
+@app.route("/api/priority-score", methods=["POST"])
+def priority_score():
+    # get data
+    data = request.get_json()
+    if data is None:
+        data = {}
+    # get patient name
+    patName = data.get("name")
+    if patName is None:
+        patName = "Patient"
+    # get chief concern
+    chief = ""
+    chiefData = data.get("chief_concern")
+
+    # check if chiefData is a dict
+    if type(chiefData) == dict:
+        #get list from dict
+        chiefL = chiefData.get("chief_complaint")
+        if chiefL is None:
+            chiefL = []
+        # check if it is a list
+        if type(chiefL) == list:
+            # loop through list and build string
+            for i in range(len(chiefL)):
+                chief = chief + str(chiefL[i])
+                if i != len(chiefL) - 1:
+                    chief = chief + ", "
+                    # add in comma
+
+
+        # convert the single val to a str
+        else:
+            chief = str(chiefL)
+    else:
+        if chiefData is not None:
+            chief = str(chiefData)
+
+    # get other fields
+    symptoms = data.get("symptoms")
+    if symptoms is None:
+        symptoms = ""
+
+    medical_condition = data.get("medical_condition")
+    if medical_condition is None:
+        medical_condition = ""
+
+    medical_history = data.get("medical_history")
+    if medical_history is None:
+        medical_history = ""
+    medications = data.get("medications")
+    if medications is None:
+        medications = ""
+    allergies = data.get("allergies")
+    if allergies is None:
+        allergies = ""
+
+    # get age
+    # get date of birth
+    age = data.get("age")
+    if age is None:
+        age = data.get("date_of_birth")
+    if age is None:
+        age = "unknown"
+
+    # build prompt
+    prompt = ""
+    prompt = prompt + "You are a nurse. Rate patient urgency from 0 to 100.\n"
+    prompt = prompt + "Return only valid JSON: {\"priority_score\": <number 0-100>, \"reason\": \"short reason\"}.\n\n"
+    prompt = prompt + "Patient: " + str(patName) + "\n"
+    prompt = prompt + "Age: " + str(age) + "\n"
+    prompt = prompt + "Chief concern: " + chief + "\n"
+    prompt = prompt + "Symptoms: " + symptoms + "\n"
+    prompt = prompt + "Medical condition: " + medical_condition + "\n"
+    prompt = prompt + "History: " + medical_history + "\n"
+    prompt = prompt + "Medications: " + medications + "\n"
+    prompt = prompt + "Allergies: " + allergies + "\n"
+
+    try:
+
+        resp = client.chat.completions.create( model="gpt-4o",
+            messages=[ {"role": "system", "content": "You assign a priority score."}, {"role": "user", "content": prompt}],
+            max_tokens=120, temperature=0.2, response_format={"type": "json_object"}
+        )
+        # get output text
+        finalOut = resp.choices[0].message.content
+        if finalOut is None:
+            raise ValueError("Empty model response")
+        if finalOut.strip() == "":
+            raise ValueError("Empty model response")
+
+        parsed = json.loads(finalOut)
+        score = parsed.get("priority_score")
+        if score is None:
+            score = 0
+        #parse the json and get score
+
+
+
+        reason = parsed.get("reason")
+        if reason is None:
+            reason = ""
+
+        return jsonify({ "priority_score": score, "reason": reason })
+        # get reason and return as json
+
+    except Exception as e:
+        
+        print("priority_score error:", str(e))
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/scheduler-chat", methods=["POST"])
+def scheduler_chat():
+
+    # get all data
+    data = request.get_json()
+    if data is None:
+        data = {}
+    patient = data.get("patient")
+    if patient is None:
+        patient = {}
+
+    messages = data.get("messages")
+    if messages is None:
+        messages = []
+
+    user_message = data.get("user_message")
+    if user_message is None:
+        user_message = ""
+
+    # get patient info
+    patient_name = patient.get("name")
+    if patient_name is None:
+        patient_name = "Patient"
+
+    age = patient.get("age")
+    if age is None:
+        age = patient.get("date_of_birth")
+    if age is None:
+        age = "unknown"
+
+    # get chief concern
+    chief = ""
+    chief_data = patient.get("chief_concern")
+
+    # check if its a dictionary
+    if type(chief_data) == dict:
+        chief_list = chief_data.get("chief_complaint")
+
+        if chief_list is None:
+            chief_list = []
+
+        if type(chief_list) == list:
+
+            for i in range(len(chief_list)):
+                chief = chief + str(chief_list[i])
+
+                if i != len(chief_list) - 1:
+                    chief = chief + ", "
+
+
+        else:
+            chief = str(chief_list)
+    else:
+        if chief_data is not None:
+            chief = str(chief_data)
+
+    # build prompt
+    prompt = ""
+    prompt = prompt + "You are the patient. Respond concisely and realistically to your doctor.\n"
+    prompt = prompt + "Stay consistent with the patient details below.\n\n"
+    prompt = prompt + "Patient Name: " + str(patient_name) + "\n"
+    prompt = prompt + "Age: " + str(age) + "\n"
+    prompt = prompt + "Chief Concern: " + chief + "\n"
+    prompt = prompt + "Medical Condition: " + str(patient.get("medical_condition", "")) + "\n"
+    prompt = prompt + "Medical History: " + str(patient.get("medical_history", "")) + "\n"
+    prompt = prompt + "Medications: " + str(patient.get("medications", "")) + "\n"
+    prompt = prompt + "Allergies: " + str(patient.get("allergies", "")) + "\n\n"
+    prompt = prompt + "Conversation so far:\n"
+
+
+    #loop through the messages
+    for m in messages:
+        role = m.get("role")
+        content = m.get("content")
+
+        if role is not None:
+            if content is not None:
+                prompt = prompt + str(role) + ": " + str(content) + "\n"
+
+    prompt = prompt + "\nDoctor: " + user_message + "\n"
+    prompt = prompt + "Patient:"
+    # check role and content and add the doctor message
+
+    try:
+        resp = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}],
+            max_tokens=200, temperature=0.6
+        )
+
+        finalOut = resp.choices[0].message.content
+
+        return jsonify({"reply": finalOut})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+    # call gpt and also return reply or error
+
+
+@app.route("/api/scheduler-hint", methods=["POST"])
+def scheduler_hint():
+
+    data = request.get_json()
+    if data is None:
+        data = {}
+
+    patient = data.get("patient")
+    if patient is None:
+        patient = {}
+
+    messages = data.get("messages")
+    if messages is None:
+        messages = []
+
+    draft = data.get("draft")
+    if draft is None:
+        draft = ""
+
+    patient_name = patient.get("name")
+    if patient_name is None:
+        patient_name = "Patient"
+
+    age = patient.get("age")
+    if age is None:
+        age = patient.get("date_of_birth")
+    if age is None:
+        age = "unknown"
+
+    chief = ""
+    chief_data = patient.get("chief_concern")
+
+    if type(chief_data) == dict:
+        chief_list = chief_data.get("chief_complaint")
+
+        if chief_list is None:
+            chief_list = []
+
+        if type(chief_list) == list:
+
+            for i in range(len(chief_list)):
+                chief = chief + str(chief_list[i])
+
+                if i != len(chief_list) - 1:
+                    chief = chief + ", "
+
+
+        else:
+            chief = str(chief_list)
+    else:
+        if chief_data is not None:
+            chief = str(chief_data)
+    prompt = ""
+    prompt = prompt + "You are assisting a medical student. Provide a short hin 1-3 sentences.\n\n"
+    prompt = prompt + "Patient: " + str(patient_name) + "\n"
+    prompt = prompt + "Age: " + str(age) + "\n"
+    prompt = prompt + "Chief Concern: " + chief + "\n"
+    for i in messages:
+        role = i.get("role")
+        content = i.get("content")
+        if role is not None:
+            if content is not None:
+                prompt = prompt + str(role) + ": " + str(content) + "\n"
+
+    if draft != "":
+        prompt = prompt + "\nStudent draft: " + draft + "\n"
+
+    try:
+        resp = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}],
+            max_tokens=120, temperature=0.4)
+
+        finalOut = resp.choices[0].message.content
+        return jsonify({"hint": finalOut})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 # @app.route("/patients/<patient_id>/image")
 # def get_patient_image(patient_id):
     
@@ -697,6 +1055,105 @@ def uplaod_patient():
     
     #print(response_patient['patient_info'])
     return jsonify(response_patient["status"])
+
+@app.route("/api/generateStaffForExistingPatients", methods=["POST"])
+def generate_staff_for_existing_patients():
+
+    # get request body from frontend
+    data = request.get_json() or {}
+    limit = data.get("limit")
+    cap = int(data.get("global_cap", 357))
+
+    # query the patients table
+    resp = supabase_client.table("patients").select("*")
+    # did the request include a limit, if so apply it
+    if limit:
+        resp = resp.limit(int(limit))
+
+    # run the patient query
+    final = resp.execute()
+    # get total number of existing staff
+    resp = supabase_client.table("staff").select("id").execute()
+    staffTot = len(resp.data or [])
+
+    # did we already reach the staff cap, if so skip generation
+    if staffTot >= cap:
+        return jsonify({
+            "status": "success",
+            "patients_processed": len(final.data or []),
+            "flag1": 0,
+            "flag2": len(final.data or []),
+            "flag3": 0,
+            "cap_reached": True,
+            "staff_total": staffTot})
+
+    # flag1 = staff created
+    # flag2 = patients skipped
+    # flag3 = errors
+    flag1 = 0
+    flag2 = 0
+    flag3 = 0
+
+    # loop through all patient records
+    for i in final.data or []:
+
+        # did we reach the cap while generating staff
+        if staffTot + flag1 >= cap:
+            break
+
+        # get the patient id from the record
+        patient_id = i.get("id")
+
+        # does this record have a valid patient id
+        if not patient_id:
+            flag3 = flag3 + 1
+            continue
+
+        try:
+            # check if this patient already has a staff record
+            resp = (
+                supabase_client.table("staff").select("id").eq("patient_id", patient_id).limit(1).execute()
+            )
+
+            # did we already find an existing staff record
+            if resp.data:
+                flag2 = flag2 + 1
+                continue
+
+            # build patient context for staff generation
+            patient_data = StaffGenerator.from_patient_record(i)
+
+            # create the staff generator
+            generator = StaffGenerator(
+                patient=patient_data,
+                patient_id=patient_id
+            )
+
+            # randomly assign doctor or nurse
+            role = random.choice(["Doctor", "Nurse"])
+
+            # generate the staff message and upload to supabase
+            generator.generate_and_upload(
+                SupabaseUploader(),
+                role=role
+            )
+
+            # increase created counter
+            flag1 = flag1 + 1
+
+        except Exception as e:
+            # did staff generation fail for this patient
+            print("staff generation failed for patient {}: {}".format(patient_id, e))
+            flag3 = flag3 + 1
+
+    # build the final response
+    fin = {
+        "status": "success", "patients_processed": len(final.data or []),
+        "flag1": flag1, "flag2": flag2, "flag3": flag3
+    }
+
+    # return results to frontend
+    return jsonify(fin)
     
 
 if __name__ == "__main__":

@@ -55,16 +55,24 @@ class LabResults:
         # adult
         elif 20 <= age < 65:
             if any(c in conditions for c in ["Hypertension", "Heart Failure"]):
-                possible_tests = ["Basic Metabolic Panel", "Electrolytes", "Renal Function Test"]
+                possible_tests = ["Basic Metabolic Panel", "Renal Function Test"]
+            if any(c in conditions for c in ["Asthma", "COPD", "Chronic Cough", "Shortness of Breath"]):
+                possible_tests = ["Pulmonary Function Test", "CBC (Complete Blood Count)"]
             elif any(c in conditions for c in ["Diabetes", "Type 2 Diabetes", "Prediabetes"]):
-                possible_tests = ["Hemoglobin A1C", "Fasting Glucose", "Urine Microalbumin"]
-            elif any(c in conditions for c in ["Hyperlipidemia", "Obesity"]):
+                possible_tests = ["Hemoglobin A1C", "Fasting Glucose", "Urine Microalbumin", "Basic Metabolic Panel"]
+            elif any(c in conditions for c in ["Hyperlipidemia"]):
+                possible_tests = ["Lipid Panel"]
+            elif any(c in conditions for c in ["Obesity"]):
                 possible_tests = ["Lipid Panel", "Liver Function Test"]
+            elif any(c in conditions for c in ["Hypothyroidism", "Hyperthyroidism", "Thyroid Disease"]):
+                possible_tests = ["Thyroid Stimulating Hormone"]
             elif any(c in conditions for c in ["Anxiety", "Depression"]):
                 possible_tests = ["Thyroid Stimulating Hormone", "Vitamin D"]
             elif any(c in conditions for c in ["Liver Condition", "Fatty Liver", "Viral Hepatitis", "Autoimmune Hepatitis"]):
                 possible_tests = ["Liver Function Test", "Hepatitis Panel"]
-            elif gender == "Female" and 15 <= age <= 45:
+            elif any(c in conditions for c in ["Infection", "Pneumonia", "Inflammation", "Viral Illness"]):
+                possible_tests = ["CBC (Complete Blood Count)", "Basic Metabolic Panel"]
+            elif gender == "female" and 15 <= age <= 45:
                 possible_tests = ["Pregnancy Test", "Urine Drug Screen"]
             else:
                 possible_tests = [
@@ -79,7 +87,7 @@ class LabResults:
             if any(c in conditions for c in ["Arthritis", "Osteoporosis"]):
                 possible_tests = ["Vitamin D", "Calcium Level", "Inflammatory Markers"]
             elif any(c in conditions for c in ["Hypertension", "Heart Failure"]):
-                possible_tests = ["Electrolytes", "Renal Function Test", "BNP"]
+                possible_tests = ["Renal Function Test", "BNP"]
             elif any(c in conditions for c in ["Cognitive Impairment", "Parkinson's Disease"]):
                 possible_tests = ["Thyroid Panel", "Vitamin B12", "MRI (Brain)"]
             else:
@@ -143,7 +151,6 @@ class LabResults:
             "Lipid Panel": self.generate_lipid_panel,
             "Liver Function Test": self.generate_liver_function,
             "Thyroid Stimulating Hormone": self.generate_tsh,
-            "Electrolytes": self.generate_electrolytes,
             "Pregnancy Test": self.generate_pregnancy_test,
             "Comprehensive Metabolic Panel": self.generate_comprehensive_metabolic,
             "Hepatitis Panel": self.generate_hepatitis_panel,
@@ -187,9 +194,14 @@ class LabResults:
                 "Platelets": f"{random.randint(150, 450)} x10^3/µL"
             }
         else:  # adult
+            if any(c in conditions for c in ["Infection", "Pneumonia", "Inflammation", "Viral Illness"]):
+                wbc = round(random.uniform(11.1, 14.5), 1)
+            else:
+                wbc = round(random.uniform(4.5, 11.0), 1)
+
             if gender == "female":
                 return {
-                    "WBC": f"{round(random.uniform(4.5, 11.0), 1)} x10^3/µL",
+                    "WBC": f"{wbc} x10^3/µL",
                     "RBC": f"{round(random.uniform(4.2, 5.4), 1)} x10^6/µL",
                     "Hemoglobin": f"{round(random.uniform(12.0, 15.5), 1)} g/dL",
                     "Hematocrit": f"{round(random.uniform(36.0, 48.0), 1)}%",
@@ -197,7 +209,7 @@ class LabResults:
                 }
             else:  # male
                 return {
-                    "WBC": f"{round(random.uniform(4.5, 11.0), 1)} x10^3/µL",
+                    "WBC": f"{wbc} x10^3/µL",
                     "RBC": f"{round(random.uniform(4.5, 6.1), 1)} x10^6/µL",
                     "Hemoglobin": f"{round(random.uniform(13.5, 17.5), 1)} g/dL",
                     "Hematocrit": f"{round(random.uniform(41.0, 53.0), 1)}%",
@@ -273,9 +285,11 @@ class LabResults:
         if any(c in conditions for c in ["Hypothyroidism"]):
             tsh = round(random.uniform(4.5, 12.0), 2)
             free_t4 = round(random.uniform(0.5, 0.9), 1)
+            t3 = random.randint(60, 95)
         elif any(c in conditions for c in ["Hyperthyroidism"]):
             tsh = round(random.uniform(0.01, 0.3), 2)
             free_t4 = round(random.uniform(1.9, 3.0), 1)
+            t3 = random.randint(210, 320)
         
 
         return {
@@ -474,20 +488,27 @@ class LabResults:
 
     def generate_renal_function(self, age, gender, conditions):
 
-        gfr = random.randint(60, 120)
-        if any(c in conditions for c in ["Hypertension", "Heart Failure"]):
-            gfr = random.randint(45, 90)
+        bun = random.randint(8, 25)
+
+        if any(c in conditions for c in ["Hypertension", "Heart Failure", "Chronic Kidney Disease", "Renal Disease"]):
+            creatinine = round(random.uniform(1.2, 2.2), 1)
+        elif age >= 65:
+            creatinine = round(random.uniform(0.8, 1.6), 1)
+        else:
+            creatinine = round(random.uniform(0.6, 1.3), 1)
+
+        gfr = self.calculate_egfr(creatinine, age, gender)
 
         return {
-            "BUN": f"{random.randint(8, 25)} mg/dL",
-            "Creatinine": f"{round(random.uniform(0.6, 1.3), 1)} mg/dL",
+            "BUN": f"{bun} mg/dL",
+            "Creatinine": f"{creatinine} mg/dL",
             "GFR": f"{gfr} mL/min/1.73m²"
         }
 
     def generate_hemoglobin_a1c(self, age, gender, conditions):
 
         if any(d in conditions for d in ["Diabetes", "Type 2 Diabetes", "Prediabetes"]):
-            a1c = round(random.uniform(6.5, 9.5), 1)
+            a1c = round(random.uniform(6.0, 7.5), 1)
         else:
             a1c = round(random.uniform(4.8, 5.6), 1)
 
@@ -500,8 +521,8 @@ class LabResults:
     def generate_fasting_glucose(self, age, gender, conditions):
 
         if any(d in conditions for d in ["Diabetes", "Type 2 Diabetes", "Prediabetes"]):
-            return {"Glucose": f"{random.randint(126, 200)} mg/dL"}
-        return {"Glucose": f"{random.randint(70, 110)} mg/dL"}
+            return {"Glucose": f"{random.randint(105, 155)} mg/dL"}
+        return {"Glucose": f"{random.randint(70, 100)} mg/dL"}
 
 
     def generate_urine_microalbumin(self, age, gender, conditions):
@@ -513,32 +534,86 @@ class LabResults:
 
     def generate_tsh(self, age, gender, conditions):
 
-        tsh = round(random.uniform(0.4, 4.0), 2)
-        return {"TSH": f"{tsh} µIU/mL"}
-
-    def generate_electrolytes(self, age, gender, conditions):
-
         return {
-            "Sodium": f"{random.randint(135, 145)} mmol/L",
-            "Potassium": f"{round(random.uniform(3.5, 5.2), 1)} mmol/L",
-            "Chloride": f"{random.randint(98, 107)} mmol/L"
+            "TSH": "999 µIU/mL",
+            "Free T4": "999 ng/dL",
+            "T3": "999 ng/dL"
         }
 
     def generate_pregnancy_test(self, age, gender, conditions):
         # 5% chance of positive for testing
-        return {"hCG": "Positive" if random.random() < 0.05 and gender == "Female" else "Negative"}
+        return {"hCG": "Positive" if random.random() < 0.05 and gender == "female" else "Negative"}
 
     def generate_comprehensive_metabolic(self, age, gender, conditions):
 
-        base_bmp = self.generate_basic_metabolic_panel(age, gender, conditions)
+        cmp_result = self.generate_basic_metabolic_panel(age, gender, conditions)
 
-        liver_additions = {
-            "ALT": f"{random.randint(10, 40)} U/L",
-            "AST": f"{random.randint(10, 35)} U/L",
-            "Albumin": f"{round(random.uniform(3.5, 5.0), 1)} g/dL"
-        }
+        cmp_result["ALT"] = f"{random.randint(10, 40)} U/L"
+        cmp_result["AST"] = f"{random.randint(10, 35)} U/L"
+        cmp_result["Albumin"] = f"{round(random.uniform(3.5, 5.0), 1)} g/dL"
 
-        return {**base_bmp, **liver_additions}
+        abnormal_pool = []
+
+        if any(d in conditions for d in ["Diabetes", "Type 2 Diabetes", "Prediabetes"]):
+            abnormal_pool.extend(["Glucose", "Glucose"])
+
+        if any(c in conditions for c in ["Hypertension", "Heart Failure", "Renal Disease", "Chronic Kidney Disease"]):
+            abnormal_pool.extend(["BUN", "Creatinine"])
+
+        if any(c in conditions for c in ["Liver Condition", "Fatty Liver", "Liver Fibrosis", "Liver Cirrhosis", "Viral Hepatitis", "Autoimmune Hepatitis", "Other Liver Disease"]):
+            abnormal_pool.extend(["ALT", "AST", "Albumin"])
+
+        abnormal_pool.extend([
+            "Sodium",
+            "Potassium",
+            "CO2",
+            "Calcium",
+            "BUN",
+            "ALT",
+            "AST"
+        ])
+
+        num_abnormal = random.choices([0, 1, 2], weights=[30, 50, 20])[0]
+        chosen = []
+        available = abnormal_pool[:]
+
+        while available and len(chosen) < num_abnormal:
+            marker = random.choice(available)
+            chosen.append(marker)
+            available = [m for m in available if m != marker]
+
+        for marker in chosen:
+            if marker == "Glucose":
+                cmp_result["Glucose"] = f"{random.choice([random.randint(55, 69), random.randint(111, 180)])} mg/dL"
+
+            elif marker == "Sodium":
+                cmp_result["Sodium"] = f"{random.choice([random.randint(128, 134), random.randint(146, 152)])} mmol/L"
+
+            elif marker == "Potassium":
+                cmp_result["Potassium"] = f"{round(random.choice([random.uniform(2.8, 3.4), random.uniform(5.3, 6.2)]), 1)} mmol/L"
+
+            elif marker == "CO2":
+                cmp_result["CO2"] = f"{random.choice([random.randint(16, 21), random.randint(31, 36)])} mmol/L"
+
+            elif marker == "Calcium":
+                cmp_result["Calcium"] = f"{round(random.choice([random.uniform(7.8, 8.4), random.uniform(10.3, 11.5)]), 1)} mg/dL"
+
+            elif marker == "BUN":
+                cmp_result["BUN"] = f"{random.choice([random.randint(26, 45), random.randint(3, 6)])} mg/dL"
+
+            elif marker == "Creatinine":
+                cmp_result["Creatinine"] = f"{round(random.uniform(1.4, 2.4), 1)} mg/dL"
+
+            elif marker == "ALT":
+                cmp_result["ALT"] = f"{random.randint(45, 120)} U/L"
+
+            elif marker == "AST":
+                cmp_result["AST"] = f"{random.randint(40, 110)} U/L"
+
+            elif marker == "Albumin":
+                cmp_result["Albumin"] = f"{round(random.uniform(2.5, 3.4), 1)} g/dL"
+
+        return cmp_result
 
     def generate_hepatitis_panel(self, age, gender, conditions):
 
@@ -609,3 +684,25 @@ class LabResults:
             "Status": "Completed",
             "Test Name": self.test_name
         }
+
+
+    def calculate_egfr(self, creatinine, age, gender):
+        """
+        CKD-EPI 2021 creatinine equation.
+        creatinine in mg/dL
+        age in years
+        gender is expected to be 'male' or 'female'
+        """
+        gender = gender.lower().strip()
+
+        if gender == "female":
+            k = 0.7
+            a = -0.241
+            sex_factor = 1.012
+        else:
+            k = 0.9
+            a = -0.302
+            sex_factor = 1.0
+
+        egfr = 142 * (min(creatinine / k, 1) ** a) * (max(creatinine / k, 1) ** -1.200) * (0.9938 ** age) * sex_factor
+        return round(egfr)
