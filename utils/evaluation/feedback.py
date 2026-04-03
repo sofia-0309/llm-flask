@@ -245,12 +245,13 @@ class Feedback:
         OUTPUT MUST BE EXACTLY THIS FORMAT:  
       
             Rating:
-                - Provide ONE integer between 1 and 5 AND DONT ADD A SLASH(-) BEFORE THE NUMBER.
+                - Provide ONE integer between 1 and 5 AND **DONT ADD A SLASH(-) BEFORE THE NUMBER**.
                 - Rating of 1 demonstrates poor communication and lack of empathy.
                 - Rating of 2 demonstrates minimal engagement with the patient’s concerns.
                 - Rating of 3 demonstrates clear communication but limited empathy or personalization.
                 - Rating of 4 demonstrates empathetic, patient-centered communication.
                 - Rating of 5 demonstrates highly empathetic, clear, and supportive communication tailored to the patient’s concerns.
+                - DONT ADD A SLASH(-) BEFORE THE NUMBER
              
             Strengths:
                 - Provide EXACTLY 2 bullet points.
